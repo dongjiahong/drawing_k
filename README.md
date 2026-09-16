@@ -39,6 +39,8 @@ sudo nginx -t && sudo nginx -s reload
 
 ## 文件
 
-- `index.html`：页面和全部逻辑
+- `index.html`：页面结构
+- `style.css`：样式
+- `app.js`：画板逻辑
 - `logo.png`：图标
 - `nginx.conf`：Nginx 静态站点配置
