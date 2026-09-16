@@ -14,65 +14,41 @@
       <h1>K 线画板</h1>
     </div>
     <div class="group">
-      <button id="modeAdd">点击添加</button>
-      <button id="modeSelect" class="active">选择调节</button>
+      <button id="modeAdd">添加</button>
+      <button id="modeSelect" class="active">选择</button>
+      <button id="modeLine">直线</button>
+      <button id="modeRect">矩形</button>
+      <button id="modeText">文字</button>
     </div>
     <div class="group">
-      <button id="addOne">加一根</button>
       <button id="deleteOne" class="danger">删除</button>
       <button id="undo">撤销</button>
+      <button id="fit">适应</button>
+      <button id="clearAll" class="danger">清空</button>
+    </div>
+    <div class="group" id="countGroup">
+      <button data-count="1" class="active">1 板</button>
+      <button data-count="2">2 板</button>
+      <button data-count="3">3 板</button>
+      <button data-count="4">4 板</button>
     </div>
     <div class="group">
-      <div class="menu" id="menuDraw">
-        <button class="menu-toggle" id="drawToggle">标注</button>
-        <div class="menu-panel">
-          <button id="modeLine">直线</button>
-          <button id="modeRect">矩形</button>
-          <button id="modeText">文字</button>
-        </div>
-      </div>
-      <div class="menu" id="menuBoard">
-        <button class="menu-toggle" id="boardToggle">画板</button>
-        <div class="menu-panel">
-          <div class="row" id="countGroup">
-            <button data-count="1" class="active">1 板</button>
-            <button data-count="2">2 板</button>
-            <button data-count="3">3 板</button>
-            <button data-count="4">4 板</button>
-          </div>
-          <button id="fit">适应窗口</button>
-          <button id="clearAll" class="danger">清空</button>
-        </div>
-      </div>
-      <div class="menu" id="menuTpl">
-        <button class="menu-toggle">形态</button>
-        <div class="menu-panel">
-          <input id="tplName" type="text" placeholder="形态名称" />
-          <button id="tplSave">保存形态</button>
-          <select id="tplList">
-            <option value="">载入整套</option>
-          </select>
-          <button id="tplDelete" class="danger">删除形态</button>
-        </div>
-      </div>
-      <div class="menu" id="menuExport">
-        <button class="menu-toggle">导出</button>
-        <div class="menu-panel">
-          <button id="copy">复制图片</button>
-          <button id="save">导出 PNG</button>
-        </div>
-      </div>
+      <input id="tplName" type="text" placeholder="形态名称" />
+      <button id="tplSave">保存</button>
+      <select id="tplList">
+        <option value="">载入</option>
+      </select>
+      <button id="tplDelete" class="danger">删形态</button>
     </div>
     <div class="group">
       <button id="theme">深色</button>
-      <button id="scheme">绿涨红跌</button>
     </div>
   </header>
   <main>
     <div id="boards" class="boards count-1"></div>
     <aside>
       <h2>当前对象</h2>
-      <p class="hint" id="sideHint">选择调节：点中后可拖。滚轮缩放，空白处拖动平移。⌘C 复制画板，⌘V 粘贴。</p>
+      <p class="hint" id="sideHint">选择：点中后可拖。滚轮缩放，空白处拖动平移。⌘C 复制画板，⌘V 粘贴。</p>
       <div class="fields">
         <span>开</span><input id="vOpen" type="number" step="0.1" />
         <span>高</span><input id="vHigh" type="number" step="0.1" />
@@ -83,7 +59,7 @@
         新 K 线默认阳线，开盘接上一根收盘。<br />
         调收盘价时，下一根开盘会跟着走。<br />
         双击 K 线切换阳/阴。<br />
-        直线、矩形、文字画完后回到选择调节。
+        直线、矩形、文字画完后回到选择。
       </p>
     </aside>
   </main>

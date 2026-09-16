@@ -38,7 +38,6 @@ const state = {
   active: 0,
   mode: "select",
   theme: "light",
-  cnColor: false,
   clipboard: null,
   templates: loadTemplates(),
 };
@@ -92,10 +91,10 @@ function getCss(name) {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }
 function colorUp() {
-  return state.cnColor ? getCss("--up") : getCss("--down");
+  return getCss("--down");
 }
 function colorDown() {
-  return state.cnColor ? getCss("--down") : getCss("--up");
+  return getCss("--up");
 }
 
 function plotRect(board) {
@@ -592,99 +591,6 @@ function startTextEdit(board, i) {
   });
 }
 
-function composeExportCanvas() {
-  const boards = visibleBoards();
-  boards.forEach(commitText);
-  const prev = boards.map((b) => ({ selected: b.selected, selectedShape: b.selectedShape }));
-  boards.forEach((b) => {
-    b.selected = -1;
-    b.selectedShape = -1;
-    renderBoard(b, true);
-  });
-  const dpr = window.devicePixelRatio || 1;
-  const sizes = boards.map((b) => ({ w: b.canvas.width, h: b.canvas.height }));
-  const gap = Math.max(1, Math.round(dpr));
-  const n = boards.length;
-  let outW = 0, outH = 0, positions = [];
-  if (n === 1) {
-    outW = sizes[0].w;
-    outH = sizes[0].h;
-    positions = [{ x: 0, y: 0, i: 0 }];
-  } else if (n === 2) {
-    outW = sizes[0].w + gap + sizes[1].w;
-    outH = Math.max(sizes[0].h, sizes[1].h);
-    positions = [{ x: 0, y: 0, i: 0 }, { x: sizes[0].w + gap, y: 0, i: 1 }];
-  } else if (n === 3) {
-    const row0 = Math.max(sizes[0].h, sizes[1].h);
-    outW = Math.max(sizes[0].w + gap + sizes[1].w, sizes[2].w);
-    outH = row0 + gap + sizes[2].h;
-    positions = [
-      { x: 0, y: 0, i: 0 },
-      { x: sizes[0].w + gap, y: 0, i: 1 },
-      { x: 0, y: row0 + gap, i: 2 },
-    ];
-  } else {
-    const col0 = Math.max(sizes[0].w, sizes[2].w);
-    const col1 = Math.max(sizes[1].w, sizes[3].w);
-    const row0 = Math.max(sizes[0].h, sizes[1].h);
-    const row1 = Math.max(sizes[2].h, sizes[3].h);
-    outW = col0 + gap + col1;
-    outH = row0 + gap + row1;
-    positions = [
-      { x: 0, y: 0, i: 0 },
-      { x: col0 + gap, y: 0, i: 1 },
-      { x: 0, y: row0 + gap, i: 2 },
-      { x: col0 + gap, y: row0 + gap, i: 3 },
-    ];
-  }
-  const out = document.createElement("canvas");
-  out.width = Math.max(1, outW);
-  out.height = Math.max(1, outH);
-  const ctx = out.getContext("2d");
-  ctx.fillStyle = getCss("--line");
-  ctx.fillRect(0, 0, out.width, out.height);
-  ctx.font = `${12 * dpr}px "PingFang SC", "Noto Sans SC", sans-serif`;
-  ctx.textBaseline = "alphabetic";
-  positions.forEach((p) => {
-    const b = boards[p.i];
-    const s = sizes[p.i];
-    ctx.drawImage(b.canvas, p.x, p.y);
-    const label = boardCaption(b);
-    const corner = boardCorner(p.i, n);
-    const pad = 8 * dpr;
-    ctx.fillStyle = getCss("--muted");
-    const tw = ctx.measureText(label).width;
-    let lx = p.x + pad;
-    let ly = p.y + pad + 12 * dpr;
-    if (corner === "tr") { lx = p.x + s.w - pad - tw; ly = p.y + pad + 12 * dpr; }
-    if (corner === "bl") { lx = p.x + pad; ly = p.y + s.h - pad; }
-    if (corner === "br") { lx = p.x + s.w - pad - tw; ly = p.y + s.h - pad; }
-    ctx.fillText(label, lx, ly);
-  });
-  boards.forEach((b, i) => {
-    b.selected = prev[i].selected;
-    b.selectedShape = prev[i].selectedShape;
-    renderBoard(b);
-  });
-  return out;
-}
-function exportPng(toClipboard = false) {
-  const out = composeExportCanvas();
-  out.toBlob(async (blob) => {
-    if (!blob) return;
-    if (toClipboard && navigator.clipboard && window.ClipboardItem) {
-      await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
-      setStatus(`已复制 ${state.count} 个画板到剪贴板`);
-      return;
-    }
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = state.count === 1 ? "画板一.png" : `K线_${state.count}板.png`;
-    a.click();
-    URL.revokeObjectURL(a.href);
-    setStatus(`已导出 ${state.count} 个画板`);
-  });
-}
 function copyBoard() {
   commitText(current());
   state.clipboard = snapshot(current());
@@ -1096,9 +1002,6 @@ function applyPanel() {
 }
 ["vOpen", "vHigh", "vLow", "vClose"].forEach((id) => $(id).addEventListener("change", applyPanel));
 
-function closeMenus() {
-  document.querySelectorAll(".menu.open").forEach((el) => el.classList.remove("open"));
-}
 function setMode(mode, skipCommit = false) {
   if (!skipCommit) commitText(current());
   state.mode = mode;
@@ -1107,16 +1010,12 @@ function setMode(mode, skipCommit = false) {
   $("modeLine").classList.toggle("active", mode === "line");
   $("modeRect").classList.toggle("active", mode === "rect");
   $("modeText").classList.toggle("active", mode === "text");
-  const drawOn = mode === "line" || mode === "rect" || mode === "text";
-  $("drawToggle").classList.toggle("active", drawOn);
-  $("drawToggle").textContent = mode === "line" ? "直线" : mode === "rect" ? "矩形" : mode === "text" ? "文字" : "标注";
-  if (drawOn) closeMenus();
   const tips = {
     add: "点击添加 K 线，开盘接上一根收盘",
     select: "点中后拖动调节。空白处拖动画板，滚轮缩放",
-    line: "拖出直线。画完后回到选择调节",
-    rect: "拖出矩形。画完后回到选择调节",
-    text: "点击添加文字，完成后回到选择调节",
+    line: "拖出直线。画完后回到选择",
+    rect: "拖出矩形。画完后回到选择",
+    text: "点击添加文字，完成后回到选择",
   };
   setStatus(tips[mode]);
 }
@@ -1126,20 +1025,6 @@ $("modeLine").onclick = () => setMode("line");
 $("modeRect").onclick = () => setMode("rect");
 $("modeText").onclick = () => setMode("text");
 
-$("addOne").onclick = () => {
-  const board = current();
-  commitText(board);
-  pushHistory(board);
-  const last = board.candles[board.candles.length - 1];
-  const p = last ? last.close + (board.view.max - board.view.min) * 0.03 : (board.view.min + board.view.max) / 2;
-  const candle = makeCandle(board, p, last || null);
-  board.candles.push(candle);
-  board.selected = board.candles.length - 1;
-  board.selectedShape = -1;
-  ensurePricesVisible(board, candlePrices(candle));
-  syncPanel();
-  renderBoard(board);
-};
 $("deleteOne").onclick = () => {
   const board = current();
   commitText(board);
@@ -1172,19 +1057,11 @@ $("clearAll").onclick = () => {
 };
 $("undo").onclick = undo;
 $("fit").onclick = fitVisible;
-$("copy").onclick = () => exportPng(true);
-$("save").onclick = () => exportPng(false);
 $("theme").onclick = () => {
   state.theme = state.theme === "light" ? "dark" : "light";
   document.documentElement.dataset.theme = state.theme === "dark" ? "dark" : "";
   $("theme").textContent = state.theme === "dark" ? "浅色" : "深色";
   renderAll();
-};
-$("scheme").onclick = () => {
-  state.cnColor = !state.cnColor;
-  $("scheme").textContent = state.cnColor ? "红涨绿跌" : "绿涨红跌";
-  renderAll();
-  syncPanel();
 };
 $("tplSave").onclick = saveTemplate;
 $("tplDelete").onclick = deleteTemplate;
@@ -1233,19 +1110,6 @@ window.addEventListener("keydown", (e) => {
     $("deleteOne").click();
   }
 });
-document.querySelectorAll(".menu-toggle").forEach((btn) => {
-  btn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    const menu = btn.closest(".menu");
-    const open = menu.classList.contains("open");
-    closeMenus();
-    if (!open) menu.classList.add("open");
-  });
-});
-document.querySelectorAll(".menu-panel").forEach((panel) => {
-  panel.addEventListener("click", (e) => e.stopPropagation());
-});
-document.addEventListener("click", closeMenus);
 window.addEventListener("resize", resizeAll);
 refreshTplList();
 buildBoards();
