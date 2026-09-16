@@ -1,7 +1,9 @@
 const $ = (id) => document.getElementById(id);
 const PAD = { l: 22, r: 14, t: 16, b: 18 };
-const BODY_W = 18;
 const SLOT = 28;
+const SLOT_MIN = 6;
+const SLOT_MAX = 56;
+const BODY_RATIO = 18 / 28;
 const HANDLE = 6;
 const TPL_KEY = "kline-templates";
 const TEXT_SIZE = 14;
@@ -20,6 +22,7 @@ function emptyBoard(name) {
     selectedShape: -1,
     view: { min: 0, max: 100 },
     xOffset: 0,
+    slot: SLOT,
     lockView: false,
     history: [],
     canvas: null,
@@ -66,6 +69,7 @@ function snapshot(board) {
     shapes: cloneShapes(board.shapes),
     view: { ...board.view },
     xOffset: board.xOffset || 0,
+    slot: board.slot || SLOT,
   };
 }
 function pushHistory(board = current()) {
@@ -81,6 +85,7 @@ function undo() {
   board.shapes = prev.shapes || [];
   board.view = prev.view;
   board.xOffset = prev.xOffset || 0;
+  board.slot = prev.slot || SLOT;
   board.selected = Math.min(board.selected, board.candles.length - 1);
   board.selectedShape = -1;
   renderBoard(board);
@@ -112,17 +117,23 @@ function yToPrice(board, y) {
   const { min, max } = board.view;
   return max - ((y - r.y) / r.h) * (max - min);
 }
+function slotW(board) {
+  return board.slot || SLOT;
+}
+function bodyW(board) {
+  return Math.max(2, slotW(board) * BODY_RATIO);
+}
 function baseFirstX(board) {
-  return plotRect(board).x + SLOT / 2 + 6;
+  return plotRect(board).x + slotW(board) / 2 + 6;
 }
 function firstX(board) {
   return baseFirstX(board) + (board.xOffset || 0);
 }
 function slotX(board, i) {
-  return firstX(board) + i * SLOT;
+  return firstX(board) + i * slotW(board);
 }
 function slotFromX(board, x) {
-  return (x - firstX(board)) / SLOT;
+  return (x - firstX(board)) / slotW(board);
 }
 function pointToXY(board, p) {
   return { x: slotX(board, p.slot), y: priceToY(board, p.price) };
@@ -131,11 +142,11 @@ function xyToPoint(board, x, y) {
   return { slot: slotFromX(board, x), price: yToPrice(board, y) };
 }
 function indexFromX(board, x) {
-  return Math.round((x - firstX(board)) / SLOT);
+  return Math.round((x - firstX(board)) / slotW(board));
 }
 function insertIndexFromX(board, x) {
   if (!board.candles.length) return 0;
-  const raw = (x - firstX(board)) / SLOT;
+  const raw = (x - firstX(board)) / slotW(board);
   if (raw < -0.5) return 0;
   if (raw > board.candles.length - 0.5) return board.candles.length;
   return Math.max(0, Math.min(board.candles.length, Math.round(raw)));
@@ -158,17 +169,19 @@ function jitter(value) {
   const mag = 0.05 + Math.random() * 0.05;
   return value * (1 + (Math.random() < 0.5 ? -mag : mag));
 }
+function wickLen(bodyH) {
+  return bodyH * (0.15 + Math.random() * 0.7);
+}
 function makeCandle(board, price, prev = null) {
   const span = (board.view.max - board.view.min) * 0.03;
-  const wick = span * 0.55;
   if (!prev) {
     const body = Math.max(span * 0.4, jitter(span));
     return clampCandle({
       id: nextId(),
       open: price - body,
       close: price + body,
-      high: price + body + jitter(wick),
-      low: price - body - jitter(wick),
+      high: price + body + wickLen(body * 2),
+      low: price - body - wickLen(body * 2),
     });
   }
   const open = prev.close;
@@ -181,8 +194,8 @@ function makeCandle(board, price, prev = null) {
     id: nextId(),
     open,
     close,
-    high: Math.max(open, close) + jitter(wick),
-    low: Math.min(open, close) - jitter(wick),
+    high: Math.max(open, close) + wickLen(body),
+    low: Math.min(open, close) - wickLen(body),
   });
 }
 function addCandleAt(board, x, y) {
@@ -215,7 +228,7 @@ function boardCaption(board) {
 function maxXOffset(board) {
   if (!board.canvas || !board.candles.length) return 0;
   const r = plotRect(board);
-  const rightEdge = baseFirstX(board) + (board.candles.length - 1) * SLOT + BODY_W / 2;
+  const rightEdge = baseFirstX(board) + (board.candles.length - 1) * slotW(board) + bodyW(board) / 2;
   return Math.max(0, r.x + r.w - rightEdge);
 }
 function alignOffset(board, align) {
@@ -249,24 +262,38 @@ function syncNextOpen(board, i) {
   next.open = c.close;
   clampCandle(next);
 }
+function clampXOffset(board) {
+  if (!board.candles.length) {
+    board.xOffset = 0;
+    return;
+  }
+  const sw = slotW(board);
+  const minOff = -Math.max(0, (board.candles.length - 1) * sw);
+  const maxOff = maxXOffset(board) + sw;
+  board.xOffset = Math.max(minOff, Math.min(maxOff, board.xOffset || 0));
+}
 function panView(board, dx, dy) {
   const r = plotRect(board);
   const span = Math.max(1e-6, board.view.max - board.view.min);
   const dp = (dy / r.h) * span;
   board.view = { min: board.view.min + dp, max: board.view.max + dp };
-  if (board.candles.length) {
-    const minOff = -Math.max(0, (board.candles.length - 1) * SLOT);
-    const maxOff = maxXOffset(board) + SLOT;
-    board.xOffset = Math.max(minOff, Math.min(maxOff, (board.xOffset || 0) + dx));
-  }
+  board.xOffset = (board.xOffset || 0) + dx;
+  clampXOffset(board);
 }
-function zoomView(board, y, factor) {
+function zoomView(board, x, y, factor) {
   const price = yToPrice(board, y);
   const { min, max } = board.view;
   const span = Math.max(1e-6, max - min);
   const next = Math.max(span * 0.05, Math.min(span * 20, span * factor));
   const t = (max - price) / span;
   board.view = { min: price - next * (1 - t), max: price + next * t };
+
+  const oldSlot = slotW(board);
+  const nextSlot = Math.max(SLOT_MIN, Math.min(SLOT_MAX, oldSlot / factor));
+  const index = slotFromX(board, x);
+  board.slot = nextSlot;
+  board.xOffset = x - index * nextSlot - baseFirstX(board);
+  clampXOffset(board);
 }
 function expandViewAtPointer(board, y) {
   const r = plotRect(board);
@@ -284,6 +311,7 @@ function fit(board, force = true) {
   if (!board.candles.length) {
     board.view = { min: 0, max: 100 };
     board.xOffset = 0;
+    board.slot = SLOT;
     return;
   }
   let lo = Infinity, hi = -Infinity;
@@ -293,6 +321,7 @@ function fit(board, force = true) {
   }
   const pad = Math.max(4, (hi - lo) * 0.18);
   board.view = { min: lo - pad, max: hi + pad };
+  board.slot = SLOT;
   const i = visibleBoards().indexOf(board);
   board.xOffset = alignOffset(board, boardAlign(i, state.count));
 }
@@ -368,7 +397,7 @@ function candleAt(board, x, y) {
     const cx = slotX(board, i);
     const top = priceToY(board, c.high);
     const bot = priceToY(board, c.low);
-    if (Math.abs(x - cx) <= BODY_W && y >= top - 8 && y <= bot + 8) return i;
+    if (Math.abs(x - cx) <= bodyW(board) && y >= top - 8 && y <= bot + 8) return i;
   }
   return -1;
 }
@@ -378,8 +407,8 @@ function handlesFor(board, i) {
   return [
     { key: "high", x, y: priceToY(board, c.high) },
     { key: "low", x, y: priceToY(board, c.low) },
-    { key: "open", x: x - BODY_W / 2 - 2, y: priceToY(board, c.open) },
-    { key: "close", x: x + BODY_W / 2 + 2, y: priceToY(board, c.close) },
+    { key: "open", x: x - bodyW(board) / 2 - 2, y: priceToY(board, c.open) },
+    { key: "close", x: x + bodyW(board) / 2 + 2, y: priceToY(board, c.close) },
   ];
 }
 function hitHandle(board, x, y) {
@@ -479,20 +508,24 @@ function drawCandle(board, c, i, selected) {
   ctx.moveTo(x, yH);
   ctx.lineTo(x, yL);
   ctx.stroke();
-  ctx.fillRect(x - BODY_W / 2, top, BODY_W, bodyH);
+  const bw = bodyW(board);
+  ctx.fillRect(x - bw / 2, top, bw, bodyH);
   if (selected) {
     ctx.strokeStyle = getCss("--handle");
     ctx.lineWidth = 1;
-    ctx.strokeRect(x - BODY_W / 2 - 4, yH - 4, BODY_W + 8, yL - yH + 8);
+    ctx.strokeRect(x - bw / 2 - 4, yH - 4, bw + 8, yL - yH + 8);
     handlesFor(board, i).forEach((h) => drawHandle(ctx, h.x, h.y));
   }
 }
 function drawCandleIndex(board, c, i) {
+  const sw = slotW(board);
+  const step = sw >= 16 ? 1 : sw >= 10 ? 2 : 5;
+  if ((i + 1) % step !== 0 && i !== 0) return;
   const ctx = board.ctx;
   const x = slotX(board, i);
   const y = Math.min(board.canvas.clientHeight - 14, priceToY(board, c.low) + 10);
   ctx.fillStyle = getCss("--muted");
-  ctx.font = `12px "PingFang SC", "Noto Sans SC", sans-serif`;
+  ctx.font = `${sw < 12 ? 10 : 12}px "PingFang SC", "Noto Sans SC", sans-serif`;
   ctx.textAlign = "center";
   ctx.textBaseline = "top";
   ctx.fillText(String(i + 1), x, y);
@@ -608,6 +641,7 @@ function pasteBoard() {
   board.shapes = cloneShapes(state.clipboard.shapes).map((s) => ({ ...s, id: nextId() }));
   board.view = { ...state.clipboard.view };
   board.xOffset = state.clipboard.xOffset || 0;
+  board.slot = state.clipboard.slot || SLOT;
   board.selected = -1;
   board.selectedShape = -1;
   renderBoard(board);
@@ -638,6 +672,7 @@ function snapshotBoard(board) {
     shapes: cloneShapes(board.shapes),
     view: { ...board.view },
     xOffset: board.xOffset || 0,
+    slot: board.slot || SLOT,
   };
 }
 function applyBoardData(board, data) {
@@ -645,6 +680,7 @@ function applyBoardData(board, data) {
   board.shapes = cloneShapes(data.shapes || []).map((s) => ({ ...s, id: nextId() }));
   board.view = data.view ? { ...data.view } : { min: 0, max: 100 };
   board.xOffset = data.xOffset || 0;
+  board.slot = data.slot || SLOT;
   board.selected = -1;
   board.selectedShape = -1;
   board.history = [];
@@ -654,6 +690,7 @@ function clearBoardContent(board) {
   board.shapes = [];
   board.view = { min: 0, max: 100 };
   board.xOffset = 0;
+  board.slot = SLOT;
   board.selected = -1;
   board.selectedShape = -1;
 }
@@ -894,7 +931,7 @@ function bindBoard(board, index) {
       c.low += dp;
       syncNextOpen(board, i);
       board.drag.lastY = y;
-      if (Math.abs(x - board.drag.startX) > SLOT * 0.7) {
+      if (Math.abs(x - board.drag.startX) > slotW(board) * 0.7) {
         const target = Math.max(0, Math.min(board.candles.length - 1, indexFromX(board, x)));
         if (target !== board.drag.i) {
           const [moved] = board.candles.splice(board.drag.i, 1);
@@ -913,7 +950,7 @@ function bindBoard(board, index) {
   const end = () => {
     if (board.drag && board.drag.type === "shape-new") {
       const s = board.shapes[board.selectedShape];
-      if (s && Math.hypot((s.b.slot - s.a.slot) * SLOT, priceToY(board, s.b.price) - priceToY(board, s.a.price)) < 6) {
+      if (s && Math.hypot((s.b.slot - s.a.slot) * slotW(board), priceToY(board, s.b.price) - priceToY(board, s.a.price)) < 6) {
         board.shapes.pop();
         board.selectedShape = -1;
         renderBoard(board);
@@ -930,8 +967,8 @@ function bindBoard(board, index) {
   canvas.addEventListener("pointercancel", end);
   canvas.addEventListener("wheel", (e) => {
     e.preventDefault();
-    const { y } = pointerPos(board, e);
-    zoomView(board, y, e.deltaY > 0 ? 1.12 : 1 / 1.12);
+    const { x, y } = pointerPos(board, e);
+    zoomView(board, x, y, e.deltaY > 0 ? 1.12 : 1 / 1.12);
     renderBoard(board);
   }, { passive: false });
 }
