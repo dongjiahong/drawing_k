@@ -1,5 +1,5 @@
 const $ = (id) => document.getElementById(id);
-const PAD = { l: 22, r: 14, t: 16, b: 18 };
+const PAD = { l: 22, r: 14, t: 16, b: 32 };
 const BODY_W = 18;
 const SLOT = 28;
 const HANDLE = 6;
@@ -488,6 +488,16 @@ function drawCandle(board, c, i, selected) {
     handlesFor(board, i).forEach((h) => drawHandle(ctx, h.x, h.y));
   }
 }
+function drawCandleIndex(board, i) {
+  const ctx = board.ctx;
+  const r = plotRect(board);
+  ctx.fillStyle = getCss("--muted");
+  ctx.font = `11px "PingFang SC", "Noto Sans SC", sans-serif`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  ctx.fillText(String(i + 1), slotX(board, i), r.y + r.h + 6);
+  ctx.textAlign = "start";
+}
 function renderBoard(board, exporting = false) {
   if (!board.canvas) return;
   const ctx = board.ctx;
@@ -498,6 +508,7 @@ function renderBoard(board, exporting = false) {
   ctx.fillRect(0, 0, w, h);
   drawGrid(board);
   board.candles.forEach((c, i) => drawCandle(board, c, i, !exporting && i === board.selected));
+  board.candles.forEach((_, i) => drawCandleIndex(board, i));
   drawShapes(board, exporting);
   const i = visibleBoards().indexOf(board);
   const label = board.stage && board.stage.querySelector(".board-label");
